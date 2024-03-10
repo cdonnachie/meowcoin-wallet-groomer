@@ -15,13 +15,13 @@ parser = argparse.ArgumentParser(description='This script generates transaction(
 parser.add_argument('rpc_server', type=str, help='Wallet RPC server info. '
                     'Example: http://user:password@127.0.0.1:9766')
 parser.add_argument('-i', '--max_amt_input', type=float, default=25,
-  help='The maximum input amount of a single transaction to consolidate (default: 25 AVN)')
+  help='The maximum input amount of a single transaction to consolidate (default: 25 MEWC)')
 parser.add_argument('-n', '--max_num_tx', type=int, default=500,
   help='The maximum number of transactions to consolidate at once. Lower this if you are getting a tx-size error (default: 500)')
 parser.add_argument('-o', '--max_amt_per_output', type=float, default=10000,
-  help='The maximum amount (in AVN) to send to a single output address (default: 10000 AVN)')
-parser.add_argument('-f', '--fee', type=float, default=0.001,
-  help='The amount of fees (in AVN) to use for the transaction')
+  help='The maximum amount (in MEWC) to send to a single output address (default: 10000 MEWC)')
+parser.add_argument('-f', '--fee', type=float, default=1,
+  help='The amount of fees (in MEWC) to use for the transaction')
 
 args = parser.parse_args()
 
@@ -30,7 +30,7 @@ try:
   b.getblockchaininfo()
 except:
   print("Couldn't connect to meowcoin")
-  exit(1)
+  exit()
 min_fee=Decimal(args.fee)
 
 # Loop until wallet is clean
@@ -53,7 +53,7 @@ while True:
   #If the best we can do doesn't reduce the number of txouts or just moves dust, give up.
   if(scripts[most_overused][2]<3 or scripts[most_overused][1]<Decimal(0.01)):
     print("Wallet already clean.")
-    exit(0)
+    exit()
 
   usescripts=set([most_overused])
 
@@ -75,12 +75,12 @@ while True:
       txouts.append(txout)
   print('Creating tx from %d inputs of total value %s:'%(len(txouts),amt))
   for script in usescripts:
-    print('  Script %s has %d txins and %s AVN value.'%(script,scripts[script][2],str(scripts[script][1])))
+    print('  Script %s has %d txins and %s MEWC value.'%(script,scripts[script][2],str(scripts[script][1])))
 
   out={}
   na=amt-min_fee
-  #One new output per max_amt_per_output AVN of value to avoid consolidating too much value in too few addresses.
-  # But don't add an extra output if it would have less than args.max_amt_per_output AVN.
+  #One new output per max_amt_per_output MEWC of value to avoid consolidating too much value in too few addresses.
+  # But don't add an extra output if it would have less than args.max_amt_per_output MEWC.
   while na>0:
     amount=min(Decimal(args.max_amt_per_output),na)
     if ((na-amount)<10):
@@ -91,22 +91,22 @@ while True:
         out[addr]=float(0)
       out[addr]+=float(amount)
     na-=Decimal(str(float(amount)))
-  print('Paying %s AVN (%s fee) to:'%(sum([Decimal(str(out[k])) for k in out.keys()]),amt-sum([Decimal(str(out[k])) for k in out.keys()])))
+  print('Paying %s MEWC (%s fee) to:'%(sum([Decimal(str(out[k])) for k in out.keys()]),amt-sum([Decimal(str(out[k])) for k in out.keys()])))
   for o in out.keys():
     print('  %s %s'%(o,out[o]))
 
   txn=b.createrawtransaction(txouts,out)
-  a = input('Sign the transaction? y/[n]: ')
-  if a != 'y':
-    exit(0)
+  a = input('Sign the transaction? [y]/n: ')
+  if a == 'n' or a == 'N':
+    exit()
 
   signed_txn=b.signrawtransaction(txn)
   #print(signed_txn)
   print('Bytes: %d Fee: %s'%(len(signed_txn['hex'])/2,amt-sum([Decimal(str(out[x])) for x in out.keys()])))
 
-  a = input('Send the transaction? y/[n]: ')
-  if a != 'y':
-    exit(0)
+  a = input('Send the transaction? [y]/n: ')
+  if a == 'n' or a == 'N':
+    exit()
 
   txid = b.sendrawtransaction(signed_txn['hex'])
   print('Transaction sent! txid: %s\n' % txid)

@@ -54,13 +54,13 @@ optional arguments:
   -h, --help            show this help message and exit
   -i MAX_AMT_INPUT, --max_amt_input MAX_AMT_INPUT
                         The maximum input amount of a single transaction to
-                        consolidate (default: 25 AVN)
+                        consolidate (default: 25 MEWC)
   -n MAX_NUM_TX, --max_num_tx MAX_NUM_TX
                         The maximum number of transactions to consolidate at
                         once. Lower this if you are getting a tx-size error
                         (default: 500)
   -o MAX_AMT_PER_OUTPUT, --max_amt_per_output MAX_AMT_PER_OUTPUT
-                        The maximum amount (in AVN) to send to a single output
-                        address (default: 10000 AVN)
-  -f FEE, --fee FEE     The amount of fees (in AVN) to use for the transaction
+                        The maximum amount (in MEWC) to send to a single output
+                        address (default: 10000 MEWC)
+  -f FEE, --fee FEE     The amount of fees (in MEWC) to use for the transaction
 ```
