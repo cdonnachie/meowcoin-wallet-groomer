@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # simple cleanup script, 2012-12-25 <greg@xiph.org>
 # 2018: updated by brianmct
-# 2022: updated by cdonnachie
+# 2024: updated by cdonnachie
 import sys
 import operator
 from decimal import Decimal
@@ -22,8 +22,28 @@ parser.add_argument('-o', '--max_amt_per_output', type=Decimal, default=Decimal(
   help='The maximum amount (in MEWC) to send to a single output address (default: 10000 MEWC)')
 parser.add_argument('-f', '--fee', type=Decimal, default=Decimal('1'),
   help='The amount of fees (in MEWC) to use for the transaction')
+parser.add_argument('--reuse', action='store_true', help='Reuse the same address for the consolidated funds (default: False)')
+parser.add_argument('-a', '--address', type=str, default=None, 
+  help='The address to send the consolidated funds to')
+parser.add_argument('--auto', action='store_true', help='Automatically answer "yes" to all questions')
 
 args = parser.parse_args()
+transactions = []
+
+print("\033[33mStarting wallet cleanup...\033[0m")
+print(f"\033[36mMax input amount:\033[0m {args.max_amt_input} MEWC"
+      f"\n\033[36mMax number of transactions to consolidate:\033[0m {args.max_num_tx}"
+      f"\n\033[36mMax amount per output:\033[0m {args.max_amt_per_output} MEWC"
+      f"\n\033[36mFee:\033[0m {args.fee} MEWC"
+      f"\n\033[36mReuse:\033[0m {args.reuse}")
+if args.address is not None:
+    print(f"\033[36mAddress:\033[0m {args.address}")
+elif args.reuse and args.address is None:
+    print("\033[36mAddress:\033[0m Reuse the same address for the consolidated funds")
+else:
+    print("\033[36mAddress:\033[0m Consolidate each transaction to a new address")
+print(f"\033[36mAuto:\033[0m {args.auto}"  
+  + f"\n\033[36mRPC server:\033[0m {args.rpc_server}\n")
 
 try:
   b = AuthServiceProxy(args.rpc_server)
@@ -32,12 +52,21 @@ except Exception as e:
   print("\033[91mCouldn't connect to meowcoin:", "\033[0m", e)
   sys.exit()
 
+if args.address is not None:
+  address = b.validateaddress(args.address)
+  if not address['isvalid']:
+    print("\033[91mInvalid address:", "\033[0m", args.address)
+    sys.exit()
+  if not address['ismine']:
+    print("\033[91mAddress is not in the wallet:", "\033[0m", args.address)
+    sys.exit()
+
 walletinfo = b.getwalletinfo()
 try:
     walletEncrypted = walletinfo.get('unlocked_until', None)
     if walletEncrypted == 0:
       print("\033[91mWallet is locked. Please unlock it in the Core wallet debug console.", "\033[0m")    
-      print("Run to unlock for 5 minutes: \033[33mwalletpassphrase\033[0m \033[36myour_password\033[0m \033[33m600 ", "\033[0m")    
+      print("Example: \033[33mwalletpassphrase\033[0m \033[36myour_password\033[0m \033[33m600 ", "\033[0m")    
       sys.exit()
     elif walletEncrypted is None:
       print("\033[33mWallet is not encrypted; you should consider encrypting it as soon as possible!", "\033[0m")    
@@ -65,7 +94,11 @@ while True:
       scripts[script] = (scripts[script][0], scripts[script][1] + coin['amount'], scripts[script][0] + 1)
 
   if len(scripts) == 0:
-    print("\033[32mWallet already clean.", "\033[0m")    
+    if len(transactions) == 0:
+      print("\033[32mWallet already clean.", "\033[0m")    
+    else:
+      print("\033[32mTransactions sent:", transactions, "\033[0m")
+      print("\033[32mWallet has been cleaned", "\033[0m")
     sys.exit()
 
   # Which script has the largest number of well confirmed small but not dust outputs?
@@ -73,7 +106,11 @@ while True:
 
   # If the best we can do doesn't reduce the number of txouts or just moves dust, give up.
   if scripts[most_overused][2] < 3 or scripts[most_overused][1] < Decimal('0.01'):
-    print("\033[32mWallet already clean.", "\033[0m")    
+    if len(transactions) == 0:
+      print("\033[32mWallet already clean.", "\033[0m")    
+    else:
+      print("\033[32mTransactions sent:", transactions, "\033[0m")
+      print("\033[32mWallet has been cleaned", "\033[0m")
     sys.exit()
 
   usescripts = set([most_overused])
@@ -106,7 +143,11 @@ while True:
     amount = min(args.max_amt_per_output, na)
     if (na - amount) < Decimal('10'):
       amount = na
-    addr = b.getnewaddress('consolidate')
+    if args.address is None:
+      if not args.reuse or addr is None:
+        addr = b.getnewaddress('consolidate')
+    else:
+      addr = args.address
     if amount > 0:
       if addr not in out:
         out[addr] = Decimal('0')
@@ -118,18 +159,21 @@ while True:
 
   try:
     txn = b.createrawtransaction(txouts, out)
-    a = input('Sign the transaction? [y]/n: ')
-    if a == 'n' or a == 'N':
-      sys.exit()
+    if not args.auto:
+      a = input('Sign the transaction? [y]/n: ')
+      if a == 'n' or a == 'N':
+        sys.exit()
 
     signed_txn = b.signrawtransaction(txn)
     print('Bytes: %d Fee: %s' % (len(signed_txn['hex']) / 2, amt - sum(out.values())))
 
-    a = input('Send the transaction? [y]/n: ')
-    if a == 'n' or a == 'N':
-      sys.exit()
+    if not args.auto:
+      a = input('Send the transaction? [y]/n: ')
+      if a == 'n' or a == 'N':
+        sys.exit()
 
     txid = b.sendrawtransaction(signed_txn['hex'])
+    transactions.append(txid)
     print('Transaction sent! txid: %s\n' % txid)
   except Exception as e:
     print("\033[91mError occurred during transaction creation/sending:", e, "\033[0m")    
